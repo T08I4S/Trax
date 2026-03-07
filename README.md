@@ -4,8 +4,6 @@ Trax is a modern, lightweight, and powerful desktop application written in Pytho
 
 It effortlessly converts unsupported or complex formats (like PowerPoint presentations, Word documents, Videos, Audios, and multi-page Images) into clean, standard formats (`.pdf`, `.mp3`, `.wav`) optimized for AI ingestion or personal use.
 
-![Trax Preview](https://via.placeholder.com/800x450.png?text=Trax+Desktop+App)
-
 ## ✨ Features
 
 - **⭐ NotebookLM Optimization**: Instantly convert robust documents ensuring text is fully readable by Google NotebookLM.

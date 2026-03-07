@@ -1,0 +1,16 @@
+customtkinter
+tkinterdnd2
+python-pptx
+pydub
+moviepy
+Pillow
+img2pdf
+reportlab
+pypdf
+pytesseract
+python-docx
+docx2pdf
+PyInstaller
+comtypes
+pdf2image
+packaging

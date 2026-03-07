@@ -1,0 +1,23 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Virtual environment
+venv/
+env/
+.env
+
+# Temp files
+*.temp
+*.tmp
+%TEMP%/Trax/
+
+# OS generated files
+.DS_Store
+Thumbs.db

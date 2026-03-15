@@ -10,6 +10,15 @@ import pytesseract
 from docx2pdf import convert as docx_convert
 import comtypes.client
 
+# --- Setup pydub to use imageio_ffmpeg so we don't need system ffmpeg ---
+try:
+    import imageio_ffmpeg
+    AudioSegment.converter = imageio_ffmpeg.get_ffmpeg_exe()
+    AudioSegment.ffmpeg = imageio_ffmpeg.get_ffmpeg_exe()
+except Exception:
+    pass
+# ------------------------------------------------------------------------
+
 from .file_manager import file_manager
 
 def get_base_name(file_path):
@@ -162,13 +171,63 @@ def convert_pptx_full(file_path, output_dir):
     pdf_path = os.path.join(output_dir, f"{base_name}_slides.pdf")
     mp3_path = os.path.join(output_dir, f"{base_name}_audio.mp3")
     
+    # 1. AUDIO EXTRACTION FIRST (avoids COM lock from PowerPoint)
+    audio_extracted = False
     try:
+        from moviepy import AudioFileClip, concatenate_audioclips
+        import zipfile
+        import re
+        
+        with zipfile.ZipFile(file_path, 'r') as zip_ref:
+            media_files = [f for f in zip_ref.namelist() if f.startswith('ppt/media/') and f.lower().endswith(('.wav', '.m4a', '.mp3', '.wma', '.aac', '.mp4', '.avi', '.mov', '.mkv', '.wmv'))]
+            
+            if media_files:
+                temp_ext_dir = os.path.join(output_dir, "pptx_media")
+                os.makedirs(temp_ext_dir, exist_ok=True)
+                
+                def get_num(name):
+                    match = re.search(r'\d+', name)
+                    return int(match.group()) if match else 0
+                    
+                media_files.sort(key=get_num)
+                
+                clips = []
+                for m in media_files:
+                    ext_path = zip_ref.extract(m, temp_ext_dir)
+                    try:
+                        clip = AudioFileClip(ext_path)
+                        clips.append(clip)
+                    except Exception as ex:
+                        print(f"Trax warning: Could not load {m}: {ex}")
+                        
+                if clips:
+                    try:
+                        final_audio = concatenate_audioclips(clips)
+                        final_audio.write_audiofile(mp3_path, bitrate="128k", logger=None)
+                        audio_extracted = os.path.exists(mp3_path)
+                    except Exception as ex2:
+                        print(f"Trax warning: Could not concatenate/export audio: {ex2}")
+                    finally:
+                        for c in clips:
+                            try:
+                                c.close()
+                            except:
+                                pass
+                        try:
+                            final_audio.close()
+                        except:
+                            pass
+    except Exception as e:
+        print(f"Trax error: Zip/Audio extraction failed for {file_path}: {e}")
+        
+    # 2. PDF EXTRACTION
+    try:
+        import comtypes.client
         import pythoncom
         pythoncom.CoInitialize()
         powerpoint = comtypes.client.CreateObject("Powerpoint.Application")
         abs_in = os.path.normpath(os.path.abspath(file_path))
         abs_out = os.path.normpath(os.path.abspath(pdf_path))
-        # WithWindow=False might fail in some Office versions, fallback if needed
         deck = powerpoint.Presentations.Open(abs_in, WithWindow=False)
         deck.SaveAs(abs_out, 32)
         deck.Close()
@@ -180,43 +239,7 @@ def convert_pptx_full(file_path, output_dir):
             pass
         raise Exception(f"Errore conversione PPTX in PDF: {str(e)}\nAssicurati di avere MS Office installato.")
         
-    try:
-        with zipfile.ZipFile(file_path, 'r') as zip_ref:
-            media_files = [f for f in zip_ref.namelist() if f.startswith('ppt/media/') and f.lower().endswith(('.wav', '.m4a', '.mp3', '.wma', '.aac'))]
-            
-            if not media_files:
-                return pdf_path, None
-                
-            temp_ext_dir = os.path.join(output_dir, "pptx_media")
-            os.makedirs(temp_ext_dir, exist_ok=True)
-            
-            import re
-            def get_num(name):
-                match = re.search(r'\d+', name)
-                return int(match.group()) if match else 0
-                
-            media_files.sort(key=get_num)
-            
-            combined = AudioSegment.empty()
-            silence = AudioSegment.silent(duration=500)
-            
-            found_audio = False
-            for m in media_files:
-                ext_path = zip_ref.extract(m, temp_ext_dir)
-                try:
-                    seg = AudioSegment.from_file(ext_path)
-                    if found_audio:
-                        combined += silence
-                    combined += seg
-                    found_audio = True
-                except:
-                    pass
-                    
-            if found_audio:
-                combined.export(mp3_path, format="mp3")
-                return pdf_path, mp3_path
-            else:
-                return pdf_path, None
-                
-    except Exception:
+    if audio_extracted:
+        return pdf_path, mp3_path
+    else:
         return pdf_path, None
